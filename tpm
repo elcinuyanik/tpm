@@ -1,0 +1,92 @@
+from subprocess import Popen, PIPE, STDOUT
+import configparser
+import crypt
+import os
+
+
+class Tpm:
+
+    def create_primary_key(self, keyname):
+
+        cmd = ['/usr/bin/tpm2_createprimary', '-c', keyname]
+        try:
+            with Popen(cmd, shell=False, stdout=PIPE, stderr=PIPE) as process:
+                result = process.communicate()[0]
+                return True
+        except Exception as e:
+            raise Exception('Primary key can not be created')
+
+    def create_sign_key(self, primary_keyname, sign_keyname):
+        cmd = ['/usr/bin/tpm2_create', '-C', primary_keyname, '-Gaes128', '-u', sign_keyname + '.pub', '-r',
+               sign_keyname + '.priv']
+
+        try:
+            with Popen(cmd, shell=False, stderr=PIPE, stdout=PIPE) as process:
+                result = process.communicate()[0]
+                return True
+        except Exception as e:
+            raise Exception("Signning key can not be created")
+
+    def load_key_tpm(self, primary_keyname, sign_keyname, tpm_key_name):
+        cmd = ['/usr/bin/tpm2_load', '-C', primary_keyname, '-u', sign_keyname + '.pub', '-r', sign_keyname + '.priv',
+               '-c', tpm_key_name + '.ctx']
+        try:
+            with Popen(cmd, shell=False, stderr=PIPE, stdout=PIPE) as process:
+                result = process.communicate()[0]
+                return True
+        except Exception as e:
+            raise Exception("Key can not be loaded to TPM Device")
+
+    def encrypt_file(self, tpm_key_name, output_file, input_file):
+        cmd = ['/usr/bin/tpm2_encryptdecrypt', '-c', tpm_key_name + '.ctx', '-o', output_file, input_file]
+        try:
+            with Popen(cmd, shell=False, stderr=PIPE, stdout=PIPE) as process:
+                result = process.communicate()[0]
+                return output_file
+        except Exception as e:
+            raise Exception("File encryption is failed")
+
+    def decrypt_file(self, tpm_key_name, output_file, input_file):
+        cmd = ['/usr/bin/tpm2_encryptdecrypt', '-d', '-c', tpm_key_name + '.ctx', '-o', output_file, input_file]
+        try:
+            with Popen(cmd, shell=False, stderr=PIPE, stdout=PIPE) as process:
+                result = process.communicate()[0]
+                return output_file
+        except Exception as e:
+            raise Exception("File decryption is failed")
+
+    def encrypt_string(self, tpm_key_name, input_string):
+        cmd = ["rm", "temp.enc", "temp_enc.txt"]
+        try:
+            with open("temp_enc.txt", "wb") as f:
+                if type(input_string) is str:
+                    input_string = bytes(input_string, "utf-8")
+                f.write(input_string)
+            self.encrypt_file(tpm_key_name, "temp.enc", "temp_enc.txt")
+            with open('temp.enc', 'rb') as f:
+                encrypted = f.read()
+
+            with Popen(cmd, shell=False, stderr=PIPE, stdout=PIPE) as process:
+                result = process.communicate()[0]
+                return encrypted
+        except Exception as e:
+            raise Exception("String encrypted is failed")
+
+
+    def decrypt_string(self, tpm_key_name, input_string):
+        cmd = ["rm", "dcry.dec", "temp_dec.txt"]
+        try:
+            with open("temp_dec.txt", "wb") as f:
+                if type(input_string) is str:
+                    input_string = bytes(input_string, "utf-8")
+                f.write(input_string)
+            self.decrypt_file(tpm_key_name, "dcry.dec", "temp_dec.txt")
+            with open('dcry.dec', 'rb') as f:
+                decrypted = f.read()
+
+            with Popen(cmd, shell=False, stderr=PIPE, stdout=PIPE) as process:
+                result = process.communicate()[0]
+                return decrypted.decode()
+        except Exception as e:
+            raise Exception("String decryption is failed")
+
